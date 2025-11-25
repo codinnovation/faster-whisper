@@ -9,7 +9,7 @@ import time
 app = FastAPI(title="Faster Whisper API")
 
 # Configuration via Environment Variables
-MODEL_SIZE = os.getenv("MODEL_SIZE", "tiny")
+MODEL_SIZE = os.getenv("MODEL_SIZE", "base")
 DEVICE = os.getenv("DEVICE", "cpu")
 COMPUTE_TYPE = os.getenv("COMPUTE_TYPE", "int8")
 
@@ -28,7 +28,11 @@ def health_check():
     return {"status": "ok", "model": MODEL_SIZE, "device": DEVICE}
 
 @app.post("/transcribe")
-async def transcribe_audio(file: UploadFile = File(...)):
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    initial_prompt: str = None,
+    vad_filter: bool = True
+):
     if model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
 
@@ -43,8 +47,14 @@ async def transcribe_audio(file: UploadFile = File(...)):
         start_time = time.time()
         
         # Transcribe
-        # beam_size=5 is a good default for accuracy
-        segments, info = model.transcribe(temp_filename, beam_size=5)
+        # vad_filter=True is CRITICAL for classrooms to ignore background noise/silence
+        segments, info = model.transcribe(
+            temp_filename, 
+            beam_size=5,
+            vad_filter=vad_filter,
+            min_silence_duration_ms=500,
+            initial_prompt=initial_prompt
+        )
         
         # Collect results
         transcript = []
