@@ -6,9 +6,19 @@ WORKDIR /app
 
 # Install only essential system dependencies
 # Install ffmpeg-related libraries without GUI dependencies
+# Also install build tools needed for PyAV compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    libavcodec-extra \
+    pkg-config \
+    gcc \
+    python3-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libavdevice-dev \
+    libavfilter-dev \
+    libswscale-dev \
+    libswresample-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching

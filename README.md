@@ -282,6 +282,19 @@ Leave `language` parameter empty for auto-detection.
 
 ## 🐛 Troubleshooting
 
+### Docker Build Fails with "pkg-config is required"
+
+**Problem**: Build fails with error: `pkg-config is required for building PyAV`
+
+**Solution**: This has been fixed in the latest Dockerfile! The build dependencies (`pkg-config`, `gcc`, `python3-dev`, and ffmpeg development libraries) are now included.
+
+**If you still see this error:**
+1. Make sure you're using the latest version of the Dockerfile
+2. Clear Docker cache and rebuild:
+   ```bash
+   docker build --no-cache -t faster-whisper .
+   ```
+
 ### Docker Build Fails with ffmpeg Installation
 
 **Problem**: Build fails with "exit code: 1" during ffmpeg installation or takes extremely long.
