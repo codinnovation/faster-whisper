@@ -52,7 +52,7 @@ async def transcribe_audio(
             temp_filename, 
             beam_size=5,
             vad_filter=vad_filter,
-            min_silence_duration_ms=500,
+            vad_parameters=dict(min_silence_duration_ms=500), # Fixed: Passed inside vad_parameters
             initial_prompt=initial_prompt
         )
         
