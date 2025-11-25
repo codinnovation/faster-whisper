@@ -282,6 +282,25 @@ Leave `language` parameter empty for auto-detection.
 
 ## 🐛 Troubleshooting
 
+### Docker Build Fails with ffmpeg Installation
+
+**Problem**: Build fails with "exit code: 1" during ffmpeg installation or takes extremely long.
+
+**Solution**: The Dockerfile has been optimized to use `--no-install-recommends` which prevents installing 277 unnecessary GUI packages. If you still have issues:
+
+1. **Use the minimal Dockerfile**:
+   ```bash
+   # In Coolify, change Dockerfile location to:
+   ./Dockerfile.minimal
+   ```
+
+2. **Or build locally first** to test:
+   ```bash
+   docker build -t faster-whisper-test .
+   ```
+
+3. **Check Coolify logs** for the specific error and increase build timeout if needed.
+
 ### Model not loading
 - Check memory allocation (minimum 2GB for base model)
 - Verify environment variables are set correctly
