@@ -1,5 +1,66 @@
+# Python
 venv/
 __pycache__/
 *.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment variables
 .env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+
+# Uploads and temp files
+uploads/
+temp/
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.ogg
+*.mp4
+*.webm
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+*.out
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Redis dumps
+dump.rdb
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Monitoring data
+prometheus_data/
+grafana_data/
+redis_data/
+
+# System
+.DS_Store
+Thumbs.db

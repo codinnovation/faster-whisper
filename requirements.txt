@@ -1,4 +1,22 @@
-faster-whisper
-fastapi
-uvicorn
-python-multipart
+# Core dependencies
+faster-whisper>=0.10.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# Task queue and caching
+celery>=5.3.0
+redis>=5.0.0
+flower>=2.0.0
+
+# Rate limiting
+slowapi>=0.1.9
+
+# Async I/O
+aiofiles>=23.2.0
+
+# Monitoring and metrics
+prometheus-client>=0.19.0
+
+# Additional utilities
+python-dotenv>=1.0.0
