@@ -15,20 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the application code
 COPY api.py .
-COPY celery_worker.py .
-
-# Create uploads directory
-RUN mkdir -p /app/uploads
 
 # Expose the port
 EXPOSE 8000
 
-# Environment variables with defaults
-ENV WORKERS=4
-ENV MAX_FILE_SIZE_MB=100
-ENV MODEL_SIZE=base
-ENV DEVICE=cpu
-ENV COMPUTE_TYPE=int8
-
-# Run the application with multiple workers
-CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port 8000 --workers ${WORKERS} --timeout-keep-alive 75 --limit-concurrency 1000"]
+# Run the application
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
