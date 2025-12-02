@@ -2,3 +2,5 @@ faster-whisper
 fastapi
 uvicorn
 python-multipart
+celery[redis]
+redis
