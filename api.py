@@ -14,7 +14,15 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "mode": "async"}
+    # Check Redis connection
+    try:
+        # Ping workers to see if any are alive
+        ping = celery_app.control.ping(timeout=0.5)
+        redis_status = "connected" if ping else "waiting_for_workers"
+    except Exception as e:
+        redis_status = f"error: {str(e)}"
+        
+    return {"status": "ok", "mode": "async", "redis": redis_status}
 
 @app.post("/transcribe")
 async def transcribe_audio(
@@ -41,25 +49,35 @@ async def transcribe_audio(
         }
 
     except Exception as e:
+        # Log the full error to stdout so it shows in Docker logs
+        print(f"TRANSCRIPTION ERROR: {str(e)}")
+        
         # Clean up if save failed
         if os.path.exists(file_path):
-            os.remove(file_path)
-        raise HTTPException(status_code=500, detail=str(e))
+            try:
+                os.remove(file_path)
+            except:
+                pass
+                
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @app.get("/status/{job_id}")
 async def get_status(job_id: str):
-    task_result = AsyncResult(job_id, app=celery_app)
-    
-    if task_result.state == 'PENDING':
-        return {"job_id": job_id, "status": "pending"}
-    elif task_result.state == 'STARTED':
-        return {"job_id": job_id, "status": "processing"}
-    elif task_result.state == 'SUCCESS':
-        return {"job_id": job_id, "status": "completed", "result": task_result.result}
-    elif task_result.state == 'FAILURE':
-        return {"job_id": job_id, "status": "failed", "error": str(task_result.result)}
-    else:
-        return {"job_id": job_id, "status": task_result.state}
+    try:
+        task_result = AsyncResult(job_id, app=celery_app)
+        
+        if task_result.state == 'PENDING':
+            return {"job_id": job_id, "status": "pending"}
+        elif task_result.state == 'STARTED':
+            return {"job_id": job_id, "status": "processing"}
+        elif task_result.state == 'SUCCESS':
+            return {"job_id": job_id, "status": "completed", "result": task_result.result}
+        elif task_result.state == 'FAILURE':
+            return {"job_id": job_id, "status": "failed", "error": str(task_result.result)}
+        else:
+            return {"job_id": job_id, "status": task_result.state}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Status Check Error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
