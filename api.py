@@ -1,4 +1,5 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from celery.result import AsyncResult
 from worker import celery_app, transcribe_task
@@ -7,10 +8,24 @@ import shutil
 import uuid
 
 app = FastAPI(title="Faster Whisper API (Async)")
+security = HTTPBearer()
 
 # Directory for shared storage
 UPLOAD_DIR = "/app/data"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Security Dependency
+def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
+    token = credentials.credentials
+    expected_token = os.getenv("API_SECRET")
+    
+    if not expected_token:
+        print("WARNING: API_SECRET not set in environment. Allowing all requests.")
+        return token
+        
+    if token != expected_token:
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
+    return token
 
 @app.get("/health")
 def health_check():
@@ -24,7 +39,7 @@ def health_check():
         
     return {"status": "ok", "mode": "async", "redis": redis_status}
 
-@app.post("/transcribe")
+@app.post("/transcribe", dependencies=[Depends(verify_token)])
 async def transcribe_audio(
     file: UploadFile = File(...),
     initial_prompt: str = None,
@@ -61,7 +76,7 @@ async def transcribe_audio(
                 
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
-@app.get("/status/{job_id}")
+@app.get("/status/{job_id}", dependencies=[Depends(verify_token)])
 async def get_status(job_id: str):
     try:
         task_result = AsyncResult(job_id, app=celery_app)
