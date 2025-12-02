@@ -2,27 +2,32 @@ version: '3.8'
 
 services:
   redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    image: redis:alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    # No ports exposed to host for security, only accessible within Docker network
 
   api:
     build: .
+    restart: always
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data  # Shared volume for audio files
+      - app_data:/app/data
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - MAX_CONCURRENT_TRANSCRIPTIONS=2
+      - UPLOAD_DIR=/app/data
     depends_on:
       - redis
-    command: uvicorn api:app --host 0.0.0.0 --port 8000
 
   worker:
     build: .
+    restart: always
+    # Standard prefork pool is best for Linux production
+    command: celery -A worker.celery_app worker --loglevel=info
     volumes:
-      - ./data:/app/data  # Shared volume for audio files
+      - app_data:/app/data
     environment:
       - REDIS_URL=redis://redis:6379/0
       - MODEL_SIZE=base
@@ -30,4 +35,7 @@ services:
       - COMPUTE_TYPE=int8
     depends_on:
       - redis
-    command: celery -A worker worker --loglevel=info --concurrency=2
+
+volumes:
+  redis_data:
+  app_data:
