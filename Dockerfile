@@ -16,6 +16,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application code
 COPY api.py .
 
+# Default environment variables
+ENV MODEL_SIZE=base
+ENV DEVICE=cpu
+ENV COMPUTE_TYPE=int8
+ENV MAX_CONCURRENT_TRANSCRIPTIONS=2
+
 # Expose the port
 EXPOSE 8000
 
