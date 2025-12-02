@@ -43,7 +43,8 @@ def health_check():
 async def transcribe_audio(
     file: UploadFile = File(...),
     initial_prompt: str = None,
-    vad_filter: bool = True
+    vad_filter: bool = True,
+    language: str = None
 ):
     # Create a unique filename
     filename = f"{uuid.uuid4()}_{file.filename}"
@@ -55,7 +56,7 @@ async def transcribe_audio(
             shutil.copyfileobj(file.file, buffer)
         
         # Push task to Celery
-        task = transcribe_task.delay(file_path, vad_filter, initial_prompt)
+        task = transcribe_task.delay(file_path, vad_filter, initial_prompt, language)
         
         return {
             "job_id": task.id,

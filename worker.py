@@ -27,7 +27,7 @@ def load_model():
             raise e
 
 @celery_app.task(name="transcribe_task", bind=True)
-def transcribe_task(self, file_path, vad_filter=True, initial_prompt=None):
+def transcribe_task(self, file_path, vad_filter=True, initial_prompt=None, language=None):
     # Ensure model is loaded
     if model is None:
         load_model()
@@ -41,7 +41,8 @@ def transcribe_task(self, file_path, vad_filter=True, initial_prompt=None):
             beam_size=5,
             vad_filter=vad_filter,
             vad_parameters=dict(min_silence_duration_ms=500),
-            initial_prompt=initial_prompt
+            initial_prompt=initial_prompt,
+            language=language
         )
         
         transcript = []
