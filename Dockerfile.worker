@@ -13,22 +13,19 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code
-COPY api.py .
+# Copy the worker code
 COPY celery_worker.py .
 
 # Create uploads directory
 RUN mkdir -p /app/uploads
 
-# Expose the port
-EXPOSE 8000
-
 # Environment variables with defaults
-ENV WORKERS=4
-ENV MAX_FILE_SIZE_MB=100
 ENV MODEL_SIZE=base
 ENV DEVICE=cpu
 ENV COMPUTE_TYPE=int8
+ENV REDIS_HOST=redis
+ENV REDIS_PORT=6379
+ENV REDIS_DB=0
 
-# Run the application with multiple workers
-CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port 8000 --workers ${WORKERS} --timeout-keep-alive 75 --limit-concurrency 1000"]
+# Run Celery worker
+CMD ["celery", "-A", "celery_worker", "worker", "--loglevel=info", "--concurrency=2", "--max-tasks-per-child=50"]
