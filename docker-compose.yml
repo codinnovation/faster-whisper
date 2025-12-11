@@ -31,7 +31,7 @@ services:
       - app_data:/app/data
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - MODEL_SIZE=medium
+      - MODEL_SIZE=small
       - DEVICE=cpu
       - COMPUTE_TYPE=int8
       - CPU_THREADS=4
