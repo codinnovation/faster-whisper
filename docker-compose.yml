@@ -25,15 +25,18 @@ services:
   worker:
     build: .
     restart: always
+    deploy:
+      replicas: 4
     # Standard prefork pool is best for Linux production
-    command: celery -A worker.celery_app worker --loglevel=info
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=1 --prefetch-multiplier=1
     volumes:
       - app_data:/app/data
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - MODEL_SIZE=base
+      - MODEL_SIZE=medium
       - DEVICE=cpu
       - COMPUTE_TYPE=int8
+      - CPU_THREADS=4
     depends_on:
       - redis
 

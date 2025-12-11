@@ -8,9 +8,19 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 MODEL_SIZE = os.getenv("MODEL_SIZE", "base")
 DEVICE = os.getenv("DEVICE", "cpu")
 COMPUTE_TYPE = os.getenv("COMPUTE_TYPE", "int8")
+CPU_THREADS = int(os.getenv("CPU_THREADS", "4"))
 
 # Initialize Celery
 celery_app = Celery("transcriber", broker=REDIS_URL, backend=REDIS_URL)
+
+# Configure for high load
+celery_app.conf.update(
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    result_expires=3600,  # Results expire after 1 hour
+    worker_prefetch_multiplier=1,  # Fair distribution
+    broker_connection_retry_on_startup=True,
+)
 
 # Global model variable
 model = None
@@ -20,7 +30,13 @@ def load_model():
     if model is None:
         print(f"Loading model: {MODEL_SIZE} on {DEVICE} with {COMPUTE_TYPE}...")
         try:
-            model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
+            model = WhisperModel(
+                MODEL_SIZE, 
+                device=DEVICE, 
+                compute_type=COMPUTE_TYPE,
+                cpu_threads=CPU_THREADS,
+                num_workers=1
+            )
             print("Model loaded successfully.")
         except Exception as e:
             print(f"CRITICAL ERROR: Could not load model: {e}")
@@ -39,8 +55,13 @@ def transcribe_task(self, file_path, vad_filter=True, initial_prompt=None, langu
         segments, info = model.transcribe(
             file_path, 
             beam_size=5,
+            best_of=5,
             vad_filter=vad_filter,
-            vad_parameters=dict(min_silence_duration_ms=500),
+            vad_parameters=dict(
+                min_silence_duration_ms=500,
+                threshold=0.5,
+                min_speech_duration_ms=250
+            ),
             initial_prompt=initial_prompt,
             language=language
         )
