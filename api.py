@@ -44,7 +44,8 @@ async def transcribe_audio(
     file: UploadFile = File(...),
     initial_prompt: str = None,
     vad_filter: bool = True,
-    language: str = None
+    language: str = None,
+    output_format: str = "json"
 ):
     # Create a unique filename
     filename = f"{uuid.uuid4()}_{file.filename}"
@@ -56,7 +57,13 @@ async def transcribe_audio(
             shutil.copyfileobj(file.file, buffer)
         
         # Push task to Celery
-        task = transcribe_task.delay(file_path, vad_filter, initial_prompt, language)
+        task = transcribe_task.delay(
+            file_path, 
+            vad_filter, 
+            initial_prompt, 
+            language,
+            output_format
+        )
         
         return {
             "job_id": task.id,

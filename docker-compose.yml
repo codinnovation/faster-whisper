@@ -25,8 +25,8 @@ services:
   worker:
     build: .
     restart: always
-    # Standard prefork pool is best for Linux production
-    command: celery -A worker.celery_app worker --loglevel=info --concurrency=2 --prefetch-multiplier=1
+    # Optimized for 4 vCPU server (Total system threads = 4)
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=1 --prefetch-multiplier=1
     volumes:
       - app_data:/app/data
     environment:
@@ -34,14 +34,14 @@ services:
       - MODEL_SIZE=small
       - DEVICE=cpu
       - COMPUTE_TYPE=int8
-      - CPU_THREADS=4
+      - CPU_THREADS=2
     depends_on:
       - redis
 
   worker-2:
     build: .
     restart: always
-    command: celery -A worker.celery_app worker --loglevel=info --concurrency=2 --prefetch-multiplier=1
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=1 --prefetch-multiplier=1
     volumes:
       - app_data:/app/data
     environment:
@@ -49,97 +49,7 @@ services:
       - MODEL_SIZE=small
       - DEVICE=cpu
       - COMPUTE_TYPE=int8
-      - CPU_THREADS=4
-    depends_on:
-      - redis
-
-  worker-3:
-    build: .
-    restart: always
-    command: celery -A worker.celery_app worker --loglevel=info --concurrency=2 --prefetch-multiplier=1
-    volumes:
-      - app_data:/app/data
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - MODEL_SIZE=small
-      - DEVICE=cpu
-      - COMPUTE_TYPE=int8
-      - CPU_THREADS=4
-    depends_on:
-      - redis
-
-  worker-4:
-    build: .
-    restart: always
-    command: celery -A worker.celery_app worker --loglevel=info --concurrency=2 --prefetch-multiplier=1
-    volumes:
-      - app_data:/app/data
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - MODEL_SIZE=small
-      - DEVICE=cpu
-      - COMPUTE_TYPE=int8
-      - CPU_THREADS=4
-    depends_on:
-      - redis
-
-  worker-5:
-    build: .
-    restart: always
-    command: celery -A worker.celery_app worker --loglevel=info --concurrency=2 --prefetch-multiplier=1
-    volumes:
-      - app_data:/app/data
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - MODEL_SIZE=small
-      - DEVICE=cpu
-      - COMPUTE_TYPE=int8
-      - CPU_THREADS=4
-    depends_on:
-      - redis
-
-  worker-6:
-    build: .
-    restart: always
-    command: celery -A worker.celery_app worker --loglevel=info --concurrency=2 --prefetch-multiplier=1
-    volumes:
-      - app_data:/app/data
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - MODEL_SIZE=small
-      - DEVICE=cpu
-      - COMPUTE_TYPE=int8
-      - CPU_THREADS=4
-    depends_on:
-      - redis
-
-  worker-7:
-    build: .
-    restart: always
-    command: celery -A worker.celery_app worker --loglevel=info --concurrency=2 --prefetch-multiplier=1
-    volumes:
-      - app_data:/app/data
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - MODEL_SIZE=small
-      - DEVICE=cpu
-      - COMPUTE_TYPE=int8
-      - CPU_THREADS=4
-    depends_on:
-      - redis
-
-  worker-8:
-    build: .
-    restart: always
-    command: celery -A worker.celery_app worker --loglevel=info --concurrency=2 --prefetch-multiplier=1
-    volumes:
-      - app_data:/app/data
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - MODEL_SIZE=small
-      - DEVICE=cpu
-      - COMPUTE_TYPE=int8
-      - CPU_THREADS=4
+      - CPU_THREADS=2
     depends_on:
       - redis
 
