@@ -42,8 +42,33 @@ def load_model():
             print(f"CRITICAL ERROR: Could not load model: {e}")
             raise e
 
+def format_timestamp(seconds: float):
+    """Formats seconds to SRT/VTT timestamp format."""
+    seconds = float(seconds)
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    seconds_rem = seconds % 60
+    milliseconds = int((seconds_rem - int(seconds_rem)) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{int(seconds_rem):02d},{milliseconds:03d}"
+
+def generate_srt(segments):
+    output = ""
+    for i, segment in enumerate(segments, start=1):
+        start = format_timestamp(segment['start'])
+        end = format_timestamp(segment['end'])
+        output += f"{i}\n{start} --> {end}\n{segment['text']}\n\n"
+    return output
+
+def generate_vtt(segments):
+    output = "WEBVTT\n\n"
+    for segment in segments:
+        start = format_timestamp(segment['start']).replace(',', '.')
+        end = format_timestamp(segment['end']).replace(',', '.')
+        output += f"{start} --> {end}\n{segment['text']}\n\n"
+    return output
+
 @celery_app.task(name="transcribe_task", bind=True)
-def transcribe_task(self, file_path, vad_filter=True, initial_prompt=None, language=None):
+def transcribe_task(self, file_path, vad_filter=True, initial_prompt=None, language=None, output_format="json"):
     # Ensure model is loaded
     if model is None:
         load_model()
@@ -69,11 +94,13 @@ def transcribe_task(self, file_path, vad_filter=True, initial_prompt=None, langu
         transcript = []
         full_text = ""
         for segment in segments:
-            transcript.append({
+            segment_data = {
                 "start": segment.start,
                 "end": segment.end,
                 "text": segment.text.strip()
-            })
+            }
+            
+            transcript.append(segment_data)
             full_text += segment.text + " "
             
         process_time = time.time() - start_time
@@ -82,15 +109,30 @@ def transcribe_task(self, file_path, vad_filter=True, initial_prompt=None, langu
         if os.path.exists(file_path):
             os.remove(file_path)
 
-        return {
+        result = {
             "status": "completed",
             "language": info.language,
             "language_probability": info.language_probability,
             "duration": info.duration,
             "process_time": process_time,
-            "text": full_text.strip(),
-            "segments": transcript
         }
+
+        # Format output
+        if output_format == "srt":
+            result["text"] = generate_srt(transcript)
+            result["format"] = "srt"
+        elif output_format == "vtt":
+            result["text"] = generate_vtt(transcript)
+            result["format"] = "vtt"
+        elif output_format == "txt":
+            result["text"] = full_text.strip()
+            result["format"] = "txt"
+        else:
+            result["text"] = full_text.strip()
+            result["segments"] = transcript
+            result["format"] = "json"
+            
+        return result
 
     except Exception as e:
         print(f"Error processing {file_path}: {e}")
