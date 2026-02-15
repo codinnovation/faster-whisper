@@ -23,7 +23,8 @@ ENV COMPUTE_TYPE=int8
 ENV MAX_CONCURRENT_TRANSCRIPTIONS=2
 
 # Expose the port
-EXPOSE 8000
+# Expose the port
+EXPOSE 9000
 
 # Run the application
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "9000"]
