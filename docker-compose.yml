@@ -25,7 +25,7 @@ services:
   worker:
     build: .
     restart: always
-    # Optimized for 4 vCPU server (Total system threads = 4)
+    # Optimized for 8 vCPU server (Total system threads = 8)
     command: celery -A worker.celery_app worker --loglevel=info --concurrency=1 --prefetch-multiplier=1
     volumes:
       - app_data:/app/data
@@ -34,7 +34,7 @@ services:
       - MODEL_SIZE=small
       - DEVICE=cpu
       - COMPUTE_TYPE=int8
-      - CPU_THREADS=2
+      - CPU_THREADS=4
     depends_on:
       - redis
 
@@ -49,7 +49,7 @@ services:
       - MODEL_SIZE=small
       - DEVICE=cpu
       - COMPUTE_TYPE=int8
-      - CPU_THREADS=2
+      - CPU_THREADS=4
     depends_on:
       - redis
 
