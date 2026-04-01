@@ -79,8 +79,10 @@ def transcribe_task(self, file_path, vad_filter=True, initial_prompt=None, langu
         
         segments, info = model.transcribe(
             file_path, 
-            beam_size=5,
-            best_of=5,
+            beam_size=1,                      # FASTER: was 5, now takes best guess immediately
+            best_of=1,                         # FASTER: was 5, no longer explores multiple candidates
+            temperature=0,                     # FASTER: skips internal retry/fallback logic
+            condition_on_previous_text=False,  # FASTER: no longer feeds previous text as context
             vad_filter=vad_filter,
             vad_parameters=dict(
                 min_silence_duration_ms=500,
