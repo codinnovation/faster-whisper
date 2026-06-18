@@ -12,7 +12,7 @@ services:
     build: .
     restart: always
     expose:
-      - "4001"
+      - "9000"
     volumes:
       - app_data:/app/data
     environment:

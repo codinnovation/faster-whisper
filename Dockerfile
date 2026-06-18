@@ -24,7 +24,7 @@ ENV MAX_CONCURRENT_TRANSCRIPTIONS=2
 
 # Expose the port
 # Expose the port
-EXPOSE 4001
+EXPOSE 9000
 
 # Run the application
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "4001"]
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "9000"]
