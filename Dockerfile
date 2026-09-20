@@ -20,12 +20,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY . .
 
-# Create unprivileged user and ensure shared storage folder permissions
-RUN useradd -m -u 1000 appuser && \
-    mkdir -p /app/data && \
-    chown -R appuser:appuser /app /home/appuser
-
-USER appuser
+# Ensure shared data directory exists with write permissions
+RUN mkdir -p /app/data && chmod 777 /app/data
 
 # Default environment variables
 ENV MODEL_SIZE=base
