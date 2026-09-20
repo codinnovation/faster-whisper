@@ -1,9 +1,11 @@
 FROM python:3.10-slim
 
-# Install system dependencies (ffmpeg is required for Whisper, curl for healthchecks)
+# Install system dependencies (ffmpeg is required for Whisper, curl for healthchecks, gcc/python3-dev for builds)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
+    gcc \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -11,8 +13,9 @@ WORKDIR /app
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade pip and install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
