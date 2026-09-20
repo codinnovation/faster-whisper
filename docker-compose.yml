@@ -31,7 +31,7 @@ services:
       - WORKERS=4
       - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-120}
       - MAX_QUEUE_DEPTH=${MAX_QUEUE_DEPTH:-1000}
-      # Optional S3 / Cloudflare R2 / MinIO storage
+      # Optional Cloudflare R2 / S3 storage
       - S3_BUCKET=${S3_BUCKET:-}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
@@ -44,7 +44,6 @@ services:
   worker:
     build: .
     restart: always
-    # Default: concurrency=1 with 4 threads per worker. Scale replicas via: docker compose up -d --scale worker=4
     command: celery -A worker.celery_app worker --loglevel=info --concurrency=1 --prefetch-multiplier=1 -Q celery
     volumes:
       - app_data:/app/data
@@ -54,14 +53,34 @@ services:
       - DEVICE=cpu
       - COMPUTE_TYPE=int8
       - CPU_THREADS=4
-      # Optional S3 / Cloudflare R2 / MinIO storage
+      # Optional Cloudflare R2 / S3 storage
       - S3_BUCKET=${S3_BUCKET:-}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_REGION=${AWS_REGION:-us-east-1}
-    deploy:
-      replicas: 2
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker-2:
+    build: .
+    restart: always
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=1 --prefetch-multiplier=1 -Q celery
+    volumes:
+      - app_data:/app/data
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MODEL_SIZE=base
+      - DEVICE=cpu
+      - COMPUTE_TYPE=int8
+      - CPU_THREADS=4
+      # Optional Cloudflare R2 / S3 storage
+      - S3_BUCKET=${S3_BUCKET:-}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
     depends_on:
       redis:
         condition: service_healthy
