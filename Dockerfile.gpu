@@ -1,0 +1,44 @@
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
+
+# Avoid tzdata interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python 3.10, pip, ffmpeg, and curl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3.10-distutils \
+    python3-pip \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set python3.10 as default python
+RUN ln -sf /usr/bin/python3.10 /usr/bin/python
+
+WORKDIR /app
+
+# Copy and install python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create unprivileged user
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/data && \
+    chown -R appuser:appuser /app /home/appuser
+
+USER appuser
+
+# GPU-specific default configuration
+ENV MODEL_SIZE=base
+ENV DEVICE=cuda
+ENV COMPUTE_TYPE=float16
+ENV PORT=4001
+ENV WORKERS=4
+
+EXPOSE 4001
+
+# Default command: Runs Celery worker on GPU
+CMD ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info", "--concurrency=2", "--prefetch-multiplier=1", "-Q", "celery"]

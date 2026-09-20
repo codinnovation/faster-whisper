@@ -1,8 +1,9 @@
 FROM python:3.10-slim
 
-# Install system dependencies (ffmpeg is required for Whisper)
-RUN apt-get update && apt-get install -y \
+# Install system dependencies (ffmpeg is required for Whisper, curl for healthchecks)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -13,18 +14,26 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code
+# Copy application code
 COPY . .
+
+# Create unprivileged user and ensure shared storage folder permissions
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/data && \
+    chown -R appuser:appuser /app /home/appuser
+
+USER appuser
 
 # Default environment variables
 ENV MODEL_SIZE=base
 ENV DEVICE=cpu
 ENV COMPUTE_TYPE=int8
-ENV MAX_CONCURRENT_TRANSCRIPTIONS=2
+ENV PORT=4001
+ENV WORKERS=4
 
-# Expose the port
-# Expose the port
+# Expose API port
 EXPOSE 4001
 
-# Run the application
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "4001"]
+# Production command: Gunicorn managing UvicornWorker processes
+CMD ["sh", "-c", "gunicorn api:app --workers ${WORKERS:-4} --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-4001} --timeout 120 --keep-alive 5 --access-logfile - --error-logfile -"]
+
