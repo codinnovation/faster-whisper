@@ -1,11 +1,12 @@
 faster-whisper
 fastapi
-uvicorn[standard]
+uvicorn
 gunicorn
 python-multipart
 aiofiles
 celery[redis]
-redis[hiredis]
+redis
 boto3
 httpx
+
 
