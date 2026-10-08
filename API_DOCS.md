@@ -92,21 +92,23 @@ Subscribes to Server-Sent Events (SSE) to receive instant task updates without p
   ```text
   data: {"status": "subscribed", "job_id": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec"}
 
-  data: {"status": "processing", "job_id": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec"}
+  data: {"status": "processing", "job_id": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec", "progress": 0.0}
 
-  data: {"status": "completed", "result": {"text": "...", "duration": 12.5, "process_time": 1.45, "segments": [...]}}
+  data: {"type": "chunk_completed", "job_id": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec", "chunk_index": 0, "total_chunks": 12, "progress_percent": 8.3, "text": "...", "segments": [...]}
+
+  data: {"status": "completed", "result": {"text": "...", "duration": 7200.0, "process_time": 820.4, "segments": [...]}}
   ```
 
 ---
 
-### 4. Poll Task Status (Backward Compatible)
+### 4. Poll Task Status (Backward Compatible & Progressive)
 Polls the job status until completion.
 * **URL**: `/status/{job_id}`
 * **Method**: `GET`
 * **Auth**: `Bearer <API_SECRET>`
 * **Responses**:
   * **Pending**: `{"job_id": "...", "status": "pending"}`
-  * **Processing**: `{"job_id": "...", "status": "processing"}`
+  * **Processing**: `{"job_id": "...", "status": "processing", "progress": 25.0, "completed_chunks": 3, "total_chunks": 12}`
   * **Completed**:
     ```json
     {

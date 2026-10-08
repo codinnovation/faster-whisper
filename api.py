@@ -195,6 +195,15 @@ async def transcribe_audio(
                     pass
             raise HTTPException(status_code=500, detail=f"Failed to save audio file: {str(e)}")
 
+    # Record initial job state in Redis
+    try:
+        await redis_async_client.hset(
+            f"job_state:{job_id}",
+            mapping={"status": "queued", "progress": "0.0", "job_id": job_id}
+        )
+    except Exception as r_err:
+        logger.warning(f"Could not record initial job state in Redis: {r_err}")
+
     # Enqueue task to Celery with explicit job_id
     transcribe_task.apply_async(
         args=[file_path, vad_filter, initial_prompt, language, output_format, webhook_url, s3_key],
@@ -212,8 +221,38 @@ async def transcribe_audio(
 
 @app.get("/status/{job_id}", dependencies=[Depends(verify_token)])
 async def get_status(job_id: str):
-    """Polling status endpoint (maintained for 100% backward compatibility)."""
+    """
+    Polling status endpoint.
+    Checks Redis progressive state store first for real-time chunk progress, falling back to Celery AsyncResult.
+    """
+    import json
     try:
+        # Check Redis job state first for progressive progress
+        job_state = await redis_async_client.hgetall(f"job_state:{job_id}")
+        if job_state:
+            curr_status = job_state.get("status", "pending")
+            if curr_status == "completed" and "result" in job_state:
+                return {
+                    "job_id": job_id,
+                    "status": "completed",
+                    "result": json.loads(job_state["result"])
+                }
+            elif curr_status == "failed":
+                return {
+                    "job_id": job_id,
+                    "status": "failed",
+                    "error": job_state.get("error", "Task execution failed")
+                }
+            else:
+                return {
+                    "job_id": job_id,
+                    "status": curr_status,
+                    "progress": float(job_state.get("progress", 0.0)),
+                    "completed_chunks": int(job_state.get("completed_chunks", 0)),
+                    "total_chunks": int(job_state.get("total_chunks", 1))
+                }
+
+        # Fallback to Celery AsyncResult
         task_result = AsyncResult(job_id, app=celery_app)
 
         if task_result.state == 'PENDING':
@@ -234,17 +273,27 @@ async def get_status(job_id: str):
 async def stream_job_events(job_id: str):
     """
     Server-Sent Events (SSE) push endpoint.
-    Eliminates client polling by streaming status updates in real time via Redis Pub/Sub.
+    Streams both progressive chunk completion events and the final completed event.
     """
+    import json
+
     async def event_generator():
-        # Check if already completed before subscribing
+        # Check if already completed in Redis before subscribing
+        job_state = await redis_async_client.hgetall(f"job_state:{job_id}")
+        if job_state:
+            if job_state.get("status") == "completed" and "result" in job_state:
+                yield f"data: {json.dumps({'status': 'completed', 'result': json.loads(job_state['result'])})}\n\n"
+                return
+            elif job_state.get("status") == "failed":
+                yield f"data: {json.dumps({'status': 'failed', 'error': job_state.get('error', 'Unknown failure')})}\n\n"
+                return
+
+        # Check Celery directly as fallback
         task_result = AsyncResult(job_id, app=celery_app)
         if task_result.state == 'SUCCESS':
-            import json
             yield f"data: {json.dumps({'status': 'completed', 'result': task_result.result})}\n\n"
             return
         elif task_result.state == 'FAILURE':
-            import json
             yield f"data: {json.dumps({'status': 'failed', 'error': str(task_result.result)})}\n\n"
             return
 
@@ -255,17 +304,22 @@ async def stream_job_events(job_id: str):
         yield f"data: {{\"status\": \"subscribed\", \"job_id\": \"{job_id}\"}}\n\n"
 
         try:
-            # 10 minute timeout on subscription
-            async with asyncio.timeout(600):
+            # 1 hour (3600s) timeout on subscription for long audio files
+            async with asyncio.timeout(3600):
                 async for message in pubsub.listen():
                     if message["type"] == "message":
                         data = message["data"]
                         yield f"data: {data}\n\n"
-                        # Terminate SSE stream if final event received
-                        if '"completed"' in data or '"failed"' in data:
-                            break
+                        # Terminate SSE stream only when job finishes completely
+                        try:
+                            parsed = json.loads(data)
+                            if parsed.get("status") in ("completed", "failed"):
+                                break
+                        except Exception:
+                            if '"completed"' in data or '"failed"' in data:
+                                break
         except asyncio.TimeoutError:
-            yield "data: {\"status\": \"timeout\", \"message\": \"Stream timed out after 10 minutes\"}\n\n"
+            yield "data: {\"status\": \"timeout\", \"message\": \"Stream timed out after 1 hour\"}\n\n"
         finally:
             await pubsub.unsubscribe(channel)
             await pubsub.close()

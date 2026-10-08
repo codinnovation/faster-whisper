@@ -28,7 +28,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - UPLOAD_DIR=/app/data
       - API_SECRET=${API_SECRET}
-      - WORKERS=4
+      - WORKERS=2
       - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-120}
       - MAX_QUEUE_DEPTH=${MAX_QUEUE_DEPTH:-1000}
       # Optional Cloudflare R2 / S3 storage
@@ -52,7 +52,7 @@ services:
       - MODEL_SIZE=base
       - DEVICE=cpu
       - COMPUTE_TYPE=int8
-      - CPU_THREADS=4
+      - CPU_THREADS=2
       # Optional Cloudflare R2 / S3 storage
       - S3_BUCKET=${S3_BUCKET:-}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
@@ -74,7 +74,7 @@ services:
       - MODEL_SIZE=base
       - DEVICE=cpu
       - COMPUTE_TYPE=int8
-      - CPU_THREADS=4
+      - CPU_THREADS=2
       # Optional Cloudflare R2 / S3 storage
       - S3_BUCKET=${S3_BUCKET:-}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
