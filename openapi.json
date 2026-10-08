@@ -19,6 +19,41 @@
       "description": "Local Development"
     }
   ],
+  "x-apidog-environments": [
+    {
+      "name": "Staging",
+      "baseUrl": "https://asr-staging.codinnovations.com",
+      "parameters": [
+        {
+          "name": "API_SECRET",
+          "value": "",
+          "description": "Bearer token for staging environment"
+        }
+      ]
+    },
+    {
+      "name": "Production",
+      "baseUrl": "https://asr.codinnovations.com",
+      "parameters": [
+        {
+          "name": "API_SECRET",
+          "value": "",
+          "description": "Bearer token for production environment"
+        }
+      ]
+    },
+    {
+      "name": "Local Development",
+      "baseUrl": "http://localhost:4001",
+      "parameters": [
+        {
+          "name": "API_SECRET",
+          "value": "",
+          "description": "Bearer token for local development"
+        }
+      ]
+    }
+  ],
   "security": [
     {
       "BearerAuth": []
