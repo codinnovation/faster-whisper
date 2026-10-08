@@ -1,0 +1,543 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Faster Whisper Transcription API",
+    "version": "2.1.0",
+    "description": "High-availability asynchronous audio transcription API powered by Faster-Whisper, FastAPI, Celery, and Redis.\n\nSupports:\n- Offline audio batch transcription (short notes up to 2-hour recordings)\n- Silence-aware progressive chunking with parallel CPU workers\n- Real-Time Server-Sent Events (SSE) & polling with live percentage progress\n- Direct Cloudflare R2 / S3 presigned uploads"
+  },
+  "servers": [
+    {
+      "url": "https://asr-staging.codinnovations.com",
+      "description": "Staging Environment"
+    },
+    {
+      "url": "https://asr.codinnovations.com",
+      "description": "Production Environment"
+    },
+    {
+      "url": "http://localhost:4001",
+      "description": "Local Development"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Health Check Probe",
+        "description": "Returns operational health status of the API and its Redis connection. Does not require authentication.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Service is healthy and ready to accept requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "status": "ok",
+                  "mode": "async",
+                  "redis": "connected"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transcribe/upload-url": {
+      "get": {
+        "tags": ["Storage"],
+        "summary": "Generate Presigned S3/R2 Upload URL (GET)",
+        "description": "Requests an S3/Cloudflare R2 presigned PUT URL. Allows clients on slow connections to upload heavy 2-hour audio files directly to storage without loading the API server.",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "query",
+            "required": true,
+            "description": "Name of the audio file to upload",
+            "schema": {
+              "type": "string",
+              "example": "meeting_recording.m4a"
+            }
+          },
+          {
+            "name": "content_type",
+            "in": "query",
+            "required": false,
+            "description": "MIME type of the audio file",
+            "schema": {
+              "type": "string",
+              "default": "audio/m4a",
+              "example": "audio/m4a"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Presigned upload URL generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadUrlResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "500": {
+            "description": "Storage misconfiguration or S3 error"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Storage"],
+        "summary": "Generate Presigned S3/R2 Upload URL (POST)",
+        "description": "Alternative POST method to request an S3/R2 presigned upload URL.",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "interview.m4a"
+            }
+          },
+          {
+            "name": "content_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "audio/m4a"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Presigned upload URL generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadUrlResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/transcribe": {
+      "post": {
+        "tags": ["Transcription"],
+        "summary": "Submit Audio for Transcription",
+        "description": "Enqueues an asynchronous background transcription task. Accepts either direct multipart audio upload OR a previously uploaded `s3_key`.\n\n- Files $\\le 10$ minutes are processed immediately.\n- Files $> 10$ minutes (up to 2 hours) are automatically sliced into silence-aware chunks and processed in parallel across worker nodes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscribeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Job queued successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscribeJobCreated"
+                },
+                "example": {
+                  "job_id": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec",
+                  "status": "queued",
+                  "message": "Transcription started. Connect to stream_url, poll /status/{job_id}, or await webhook.",
+                  "stream_url": "/jobs/8f8b89cf-4a11-4775-9c8e-fb86de12a4ec/events",
+                  "webhook_url": "https://your-app.com/api/transcribe-webhook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input parameters (neither file nor s3_key provided)"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "413": {
+            "description": "File exceeds MAX_FILE_SIZE_MB limit"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "503": {
+            "description": "Transcription queue capacity reached (backpressure)"
+          }
+        }
+      }
+    },
+    "/status/{job_id}": {
+      "get": {
+        "tags": ["Transcription"],
+        "summary": "Get Task Status & Progressive Progress",
+        "description": "Polls the status of a transcription job. Returns live progress percentage (`progress`), completed chunks, and the final unified transcript upon completion.",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "description": "UUID returned when enqueuing via `/transcribe`",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current status of the transcription job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                },
+                "examples": {
+                  "processing": {
+                    "summary": "Job in progress (progressive chunks)",
+                    "value": {
+                      "job_id": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec",
+                      "status": "processing",
+                      "progress": 25.0,
+                      "completed_chunks": 3,
+                      "total_chunks": 12
+                    }
+                  },
+                  "completed": {
+                    "summary": "Job completed",
+                    "value": {
+                      "job_id": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec",
+                      "status": "completed",
+                      "result": {
+                        "job_id": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec",
+                        "status": "completed",
+                        "language": "en",
+                        "language_probability": 0.99,
+                        "duration": 7200.0,
+                        "process_time": 840.5,
+                        "real_time_factor": 0.117,
+                        "format": "json",
+                        "text": "Hello, welcome to today's meeting...",
+                        "segments": [
+                          {
+                            "start": 0.0,
+                            "end": 4.5,
+                            "text": "Hello, welcome to today's meeting..."
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "failed": {
+                    "summary": "Job failed",
+                    "value": {
+                      "job_id": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec",
+                      "status": "failed",
+                      "error": "Audio file corrupted or unreadable."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "500": {
+            "description": "Internal server error querying status"
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}/events": {
+      "get": {
+        "tags": ["Transcription"],
+        "summary": "Real-Time Progressive Event Stream (SSE)",
+        "description": "Subscribes to Server-Sent Events (SSE) via Redis Pub/Sub. Eliminates polling by streaming live events as 10-minute chunks finish (`chunk_completed`), followed by the final `completed` event. Connection stays active up to 1 hour.",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "description": "UUID of the transcription job",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "8f8b89cf-4a11-4775-9c8e-fb86de12a4ec"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Continuous SSE event stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Stream of JSON data events prefixed by 'data: '"
+                },
+                "example": "data: {\"status\": \"subscribed\", \"job_id\": \"8f8b89cf...\"}\n\ndata: {\"type\": \"chunk_completed\", \"chunk_index\": 0, \"total_chunks\": 12, \"progress_percent\": 8.3, \"text\": \"First 10 min...\"}\n\ndata: {\"status\": \"completed\", \"result\": {\"text\": \"...\"}}\n\n"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Token",
+        "description": "Provide your `API_SECRET` token configured in the server's `.env` file."
+      }
+    },
+    "responses": {
+      "UnauthorizedError": {
+        "description": "Authentication failure - missing or invalid Bearer token",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "detail": {
+                  "type": "string",
+                  "example": "Invalid authentication token"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok"
+          },
+          "mode": {
+            "type": "string",
+            "example": "async"
+          },
+          "redis": {
+            "type": "string",
+            "example": "connected"
+          }
+        }
+      },
+      "UploadUrlResponse": {
+        "type": "object",
+        "properties": {
+          "upload_url": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://bucket.r2.cloudflarestorage.com/uploads/uuid.m4a?X-Amz-Signature=..."
+          },
+          "file_key": {
+            "type": "string",
+            "example": "uploads/8f8b89cf-4a11-4775-9c8e-fb86de12a4ec.m4a"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "example": 3600
+          },
+          "message": {
+            "type": "string",
+            "example": "Upload file to upload_url via HTTP PUT, then pass file_key to /transcribe."
+          }
+        }
+      },
+      "TranscribeRequest": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "Audio file to upload directly (MP3, M4A, WAV, AAC, OGG, FLAC, WEBM, WMA). Optional if s3_key is provided."
+          },
+          "s3_key": {
+            "type": "string",
+            "description": "S3/R2 storage key returned by `/transcribe/upload-url`. Optional if direct file is uploaded."
+          },
+          "webhook_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional HTTP URL to receive a POST webhook with the complete result upon completion."
+          },
+          "language": {
+            "type": "string",
+            "description": "Spoken language code (e.g. 'en', 'es', 'fr', 'de'). Defaults to automatic detection."
+          },
+          "initial_prompt": {
+            "type": "string",
+            "description": "Optional context prompt to guide spelling, jargon, and punctuation."
+          },
+          "vad_filter": {
+            "type": "boolean",
+            "default": true,
+            "description": "Voice Activity Detection filter to skip silences and speed up inference."
+          },
+          "output_format": {
+            "type": "string",
+            "enum": ["json", "srt", "vtt", "txt"],
+            "default": "json",
+            "description": "Desired format for the final transcript."
+          }
+        }
+      },
+      "TranscribeJobCreated": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "example": "queued"
+          },
+          "message": {
+            "type": "string"
+          },
+          "stream_url": {
+            "type": "string"
+          },
+          "webhook_url": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "TranscriptionSegment": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "number",
+            "description": "Start timestamp in seconds",
+            "example": 0.0
+          },
+          "end": {
+            "type": "number",
+            "description": "End timestamp in seconds",
+            "example": 4.5
+          },
+          "text": {
+            "type": "string",
+            "example": "Hello, welcome to today's meeting."
+          }
+        }
+      },
+      "TranscriptionResult": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "example": "completed"
+          },
+          "language": {
+            "type": "string",
+            "example": "en"
+          },
+          "language_probability": {
+            "type": "number",
+            "example": 0.99
+          },
+          "duration": {
+            "type": "number",
+            "description": "Total audio duration in seconds",
+            "example": 7200.0
+          },
+          "process_time": {
+            "type": "number",
+            "description": "Total worker processing time in seconds",
+            "example": 840.5
+          },
+          "real_time_factor": {
+            "type": "number",
+            "example": 0.117
+          },
+          "format": {
+            "type": "string",
+            "example": "json"
+          },
+          "text": {
+            "type": "string",
+            "description": "Full concatenated text transcript"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TranscriptionSegment"
+            }
+          }
+        }
+      },
+      "JobStatusResponse": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "queued", "processing", "completed", "failed"]
+          },
+          "progress": {
+            "type": "number",
+            "description": "Percentage progress from 0.0 to 100.0",
+            "example": 50.0
+          },
+          "completed_chunks": {
+            "type": "integer",
+            "example": 6
+          },
+          "total_chunks": {
+            "type": "integer",
+            "example": 12
+          },
+          "result": {
+            "$ref": "#/components/schemas/TranscriptionResult"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      }
+    }
+  }
+}
